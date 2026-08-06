@@ -23,7 +23,7 @@ public class ProcessController {
 
     @PostMapping
     public ProcessDefinition createDefinition(@RequestBody ProcessDto dto) throws Exception {
-        
+
         ProcessDefinition definition = new ProcessDefinition();
         definition.setProcessName(dto.getProcessName());
         definition.setProcessCode(dto.getProcessCode());

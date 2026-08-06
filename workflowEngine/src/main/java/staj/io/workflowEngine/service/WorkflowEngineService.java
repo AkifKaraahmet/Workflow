@@ -33,6 +33,43 @@ public class WorkflowEngineService {
     }
 
     @Transactional
+    public void completeUserTaskAndAdvance(ProcessInstance instance, String completedNodeId) {
+        ProcessDefinition definition = definitionRepository.findById(instance.getProcessDefinitionId())
+                .orElseThrow(() -> new RuntimeException("Süreç tanımı bulunamadı!"));
+
+        try {
+            JsonNode root = objectMapper.readTree(definition.getDefinitionJson());
+            JsonNode transitions = root.get("transitions");
+
+            String nextNodeId = null;
+            if (transitions != null) {
+                for (int i = 0; i < transitions.size(); i++) {
+                    JsonNode t = transitions.get(i);
+                    if (t.get("from").asText().equals(completedNodeId)) {
+                        nextNodeId = t.get("to").asText();
+                        break;
+                    }
+                }
+            }
+
+            if (nextNodeId == null) {
+                throw new RuntimeException("Tamamlanan task'tan sonrası için transition bulunamadı: " + completedNodeId);
+            }
+
+            instance.setCurrentNodeId(nextNodeId);
+            instanceRepository.save(instance);
+
+            
+            proceed(instance);
+
+        } catch (RuntimeException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new RuntimeException("Task sonrası süreç ilerletilirken hata oluştu: " + e.getMessage(), e);
+        }
+    }
+
+    @Transactional
     public void proceed(ProcessInstance instance) {
         if ("COMPLETED".equals(instance.getStatus()) || "CANCELLED".equals(instance.getStatus()) || "SUSPENDED".equals(instance.getStatus())) {
             return;
@@ -50,7 +87,7 @@ public class WorkflowEngineService {
             if (nodes != null) {
                 for (int i = 0; i < nodes.size(); i++) {
                     JsonNode n = nodes.get(i);
-                    if (n.get("id").asText().equals(instance.getCurrentNodeId())) { // getCurrentNodeId() kullanıldı!
+                    if (n.get("id").asText().equals(instance.getCurrentNodeId())) {
                         currentNode = n;
                         break;
                     }
@@ -69,7 +106,7 @@ public class WorkflowEngineService {
                 for (int i = 0; i < transitions.size(); i++) {
                     JsonNode t = transitions.get(i);
                     if (t.get("from").asText().equals(instance.getCurrentNodeId())) {
-                        
+
                         if (t.has("condition")) {
                             boolean isConditionMet = evaluateCondition(t.get("condition"), instance.getVariablesJson());
                             if (isConditionMet) {
@@ -84,7 +121,7 @@ public class WorkflowEngineService {
                     for (int i = 0; i < transitions.size(); i++) {
                         JsonNode t = transitions.get(i);
                         if (t.get("from").asText().equals(instance.getCurrentNodeId())) {
-                            
+
                             if (t.has("default") && t.get("default").asBoolean()) {
                                 nextNodeId = t.get("to").asText();
                                 break;
@@ -107,7 +144,7 @@ public class WorkflowEngineService {
                 return;
             }
 
-            
+
             instance.setCurrentNodeId(nextNodeId);
             instanceRepository.save(instance);
             JsonNode nextNode = null;
@@ -126,7 +163,7 @@ public class WorkflowEngineService {
             String nextNodeType = nextNode.get("type").asText();
 
             if ("USER_TASK".equals(nextNodeType)) {
-                
+
                 final String finalNextNodeId = nextNodeId;
                 List<ProcessTask> existingTasks = taskRepository.findAll();
                 boolean alreadyHasTask = existingTasks.stream()
@@ -138,17 +175,17 @@ public class WorkflowEngineService {
                     ProcessTask task = new ProcessTask();
                     task.setProcessInstanceId(instance.getId());
                     task.setTaskNodeId(nextNode.get("id").asText());
-                    task.setAssignee(nextNode.get("assignee").asText());
+                    task.setAssignee(nextNode.has("assignee") ? nextNode.get("assignee").asText() : "UNASSIGNED");
                     task.setStatus("PENDING");
                     task.setCreatedDate(LocalDateTime.now());
                     taskRepository.save(task);
 
-                    saveAudit(instance.getId(), nextNodeId, "TASK_CREATED", "Onay görevi oluşturuldu. Atanan rol: " + nextNode.get("assignee").asText(), "SYSTEM");
+                    saveAudit(instance.getId(), nextNodeId, "TASK_CREATED", "Onay görevi oluşturuldu. Atanan rol: " + task.getAssignee(), "SYSTEM");
                 }
 
             } else if ("SERVICE_TASK".equals(nextNodeType)) {
                 saveAudit(instance.getId(), nextNodeId, "SERVICE_EXECUTION", "Sistem adımı çalıştırıldı.", "SYSTEM");
-                proceed(instance); 
+                proceed(instance);
             } else if ("END".equals(nextNodeType)) {
                 instance.setStatus("COMPLETED");
                 instance.setEndDate(LocalDateTime.now());

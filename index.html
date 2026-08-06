@@ -2,19 +2,39 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <title>Sürec Motoru Kontrol Paneli</title>
+    <title>Süreç Motoru Kontrol Paneli</title>
     <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
-        body { font-family: sans-serif; padding: 20px; background-color: #fafafa; }
-        .box { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; background-color: #fff; border-radius: 4px; }
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            background-color: #fafafa;
+            min-height: 100vh;
+            margin: 0;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        #root { width: 100%; display: flex; justify-content: center; }
+        .box { border: 1px solid #ccc; padding: 15px; margin-bottom: 20px; background-color: #fff; border-radius: 4px; max-width: 560px; }
         input, select { margin: 5px 0; padding: 8px; width: 100%; box-sizing: border-box; }
         button { padding: 10px 15px; margin-top: 10px; cursor: pointer; margin-right: 10px; }
         .task-item { border: 1px solid #ddd; padding: 10px; margin-top: 5px; background: #fffbf0; }
         .btn-cancel { background-color: #e74c3c; color: white; border: none; border-radius: 4px; }
         .btn-suspend { background-color: #f39c12; color: white; border: none; border-radius: 4px; }
         .btn-resume { background-color: #2ecc71; color: white; border: none; border-radius: 4px; }
+        .btn-primary { background-color: #2c3e50; color: white; border: none; border-radius: 4px; }
+        .btn-approve { background-color: #2980b9; color: white; border: none; border-radius: 4px; }
+        .error-text { color: #e74c3c; font-size: 13px; margin-top: 8px; }
+        .top-bar { max-width: 480px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+        .top-bar button { background: #eee; border: 1px solid #ccc; border-radius: 4px; }
+        table { border-collapse: collapse; width: 100%; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 6px 8px; font-size: 13px; text-align: left; }
+        th { background: #f2f2f2; }
     </style>
 </head>
 <body>
@@ -24,199 +44,307 @@
         const { useState, useEffect } = React;
         const url = 'http://localhost:8080';
 
-        function App() {
-            
-            const [kod, setKod] = useState('izin-talebi');
-            const [gun, setGun] = useState(3);
-            const [isim, setIsim] = useState('Akif');
-            const [baslatilanId, setBaslatilanId] = useState('');
+        
+        const HESAPLAR = {
+            yonetici: { sifre: 'yonetici', rol: 'yonetici', etiket: 'Yönetici' },
+            ik:       { sifre: 'ik',       rol: 'ik',       etiket: 'İnsan Kaynakları' },
+            admin:    { sifre: 'admin',    rol: 'admin',    etiket: 'Admin' },
+            kullanici:{ sifre: 'kullanici',rol: 'kullanici',etiket: 'Kullanıcı' },
+        };
 
-            const [rol, setRol] = useState('yonetici');
-            const [gorevler, setGorevler] = useState([]);
+        
+        function LoginBox({ onLogin }) {
+            const [id, setId] = useState('');
+            const [sifre, setSifre] = useState('');
+            const [hata, setHata] = useState('');
 
-            
-            const [surecId, setSurecId] = useState('');
-            const [durum, setDurum] = useState('');
-            const [tarihce, setTarihce] = useState([]);
-            const [instance, setInstance] = useState(null);
-
-            
-            const gorevleriGetir = () => {
-                fetch(url + '/tasks?assignee=' + rol)
-                    .then(res => res.json())
-                    .then(data => setGorevler(data))
-                    .catch(err => console.log(err));
+            const girisYap = (e) => {
+                e.preventDefault();
+                const hesap = HESAPLAR[id.trim().toLowerCase()];
+                if (!hesap || hesap.sifre !== sifre) {
+                    setHata('Kullanıcı adı veya şifre hatalı.');
+                    return;
+                }
+                setHata('');
+                onLogin({ kullaniciAdi: id.trim().toLowerCase(), ...hesap });
             };
 
-            
-            const surecBaslat = () => {
-                const veri = {
-                    gunSayisi: Number(gun),
-                    talepEden: isim
-                };
-                fetch(url + '/instances/start/' + kod, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(veri)
-                })
-                .then(res => res.json())
-                .then(data => {
-                    setBaslatilanId(data.id);
-                    setSurecId(data.id);
-                    alert('Surec baslatildi! ID: ' + data.id);
-                    gorevleriGetir();
-                    gecmisGetir(data.id);
-                })
-                .catch(err => alert('Hata: ' + err.message));
+            return (
+                <div className="box">
+                    <h2>Giriş Yap</h2>
+                    <form onSubmit={girisYap}>
+                        <label>Kullanıcı adı:</label>
+                        <input type="text" value={id} onChange={e => setId(e.target.value)} placeholder="örn. yonetici" />
+
+                        <label>Şifre:</label>
+                        <input type="password" value={sifre} onChange={e => setSifre(e.target.value)} placeholder="••••••••" />
+
+                        <button className="btn-primary" type="submit">Giriş Yap</button>
+                        {hata && <p className="error-text">{hata}</p>}
+                    </form>
+                    <p style={{ fontSize: '12px', color: '#888', marginTop: '15px' }}>
+                        Demo hesaplar (şifre kullanıcı adıyla aynı): yonetici · ik · admin · kullanici
+                    </p>
+                </div>
+            );
+        }
+
+        
+        function GorevKutusu({ session, onLogout }) {
+            const [gorevler, setGorevler] = useState([]);
+            const [surecler, setSurecler] = useState({}); 
+            const [hata, setHata] = useState('');
+            const [islemUstunde, setIslemUstunde] = useState(null); 
+
+            const surecDetayGetir = (id) => {
+                return fetch(url + '/instances/' + id)
+                    .then(res => res.json())
+                    .then(data => {
+                        setSurecler(prev => ({ ...prev, [id]: data }));
+                        return data;
+                    })
+                    .catch(() => null);
+            };
+
+            const gorevleriGetir = () => {
+                fetch(url + '/tasks?assignee=' + session.kullaniciAdi)
+                    .then(res => res.json())
+                    .then(data => {
+                        setGorevler(data);
+                        
+                        const benzersizIdler = [...new Set(data.map(t => t.processInstanceId))];
+                        benzersizIdler.forEach(id => surecDetayGetir(id));
+                    })
+                    .catch(err => setHata('Görevler yüklenemedi: ' + err.message));
+            };
+
+            useEffect(() => { gorevleriGetir(); }, []);
+
+            const istekYap = (id, urlYolu, basariMesaji) => {
+                setHata('');
+                setIslemUstunde(id + urlYolu);
+                fetch(url + urlYolu, { method: 'POST' })
+                    .then(async res => {
+                        const veri = await res.json().catch(() => null);
+                        if (!res.ok) {
+                            throw new Error((veri && (veri.message || veri)) || ('İstek başarısız (HTTP ' + res.status + ')'));
+                        }
+                        alert(basariMesaji);
+                        gorevleriGetir();
+                    })
+                    .catch(err => setHata(err.message))
+                    .finally(() => setIslemUstunde(null));
             };
 
             const gorevOnayla = (id) => {
+                setHata('');
+                setIslemUstunde('task' + id);
                 fetch(url + '/tasks/' + id + '/complete', {
                     method: 'POST',
                     headers: { 'Content-Type': 'text/plain' },
-                    body: rol
+                    body: session.kullaniciAdi
                 })
-                .then(res => {
-                    if (res.ok) {
-                        alert('Gorev onaylandi!');
-                        gorevleriGetir();
-                        if (surecId) gecmisGetir(surecId);
+                .then(async res => {
+                    const veri = await res.json().catch(() => null);
+                    if (!res.ok) {
+                        throw new Error((veri && veri.message) || ('İstek başarısız (HTTP ' + res.status + ')'));
                     }
+                    alert('Görev onaylandı!');
+                    gorevleriGetir();
                 })
-                .catch(err => alert('Hata: ' + err.message));
+                .catch(err => setHata(err.message))
+                .finally(() => setIslemUstunde(null));
             };
 
-            // Gecmis sorgulama metodu
-            const gecmisGetir = (id) => {
-                if (!id) return;
-                // Surec durumunu al
-                fetch(url + '/instances/' + id)
-                    .then(res => res.json())
-                    .then(data => {
-                        setInstance(data);
-                        setDurum(data.status);
-                    })
-                    .catch(err => console.log(err));
+            const surecIptalEt = (id) => istekYap(id, '/instances/' + id + '/cancel', 'Süreç iptal edildi.');
+            const surecDurdur = (id) => istekYap(id, '/instances/' + id + '/suspend', 'Süreç askıya alındı.');
+            const surecDevamEttir = (id) => istekYap(id, '/instances/' + id + '/resume', 'Süreç devam ettirildi.');
 
-                // Tarihceyi al
-                fetch(url + '/instances/' + id + '/history')
-                    .then(res => res.json())
-                    .then(data => setTarihce(data))
-                    .catch(err => console.log(err));
+            const degiskenleriOku = (instance) => {
+                if (!instance || !instance.variablesJson) return {};
+                try { return JSON.parse(instance.variablesJson); } catch { return {}; }
             };
-
-            // 🛑 SUREC IPTAL (CANCEL) METODU
-            const surecIptalEt = () => {
-                fetch(url + '/instances/' + surecId + '/cancel', { method: 'POST' })
-                    .then(res => {
-                        if (res.ok) {
-                            alert('Süreç başarıyla İPTAL edildi!');
-                            gecmisGetir(surecId);
-                        }
-                    });
-            };
-
-            // ⏸️ SUREC DURDUR (SUSPEND) METODU
-            const surecDurdur = () => {
-                fetch(url + '/instances/' + surecId + '/suspend', { method: 'POST' })
-                    .then(res => {
-                        if (res.ok) {
-                            alert('Süreç başarıyla DURDURULDU!');
-                            gecmisGetir(surecId);
-                        }
-                    });
-            };
-
-            // ▶️ SUREC DEVAM ETTIR (RESUME) METODU
-            const surecDevamEttir = () => {
-                fetch(url + '/instances/' + surecId + '/resume', { method: 'POST' })
-                    .then(res => {
-                        if (res.ok) {
-                            alert('Süreç başarıyla AKTİF edildi!');
-                            gecmisGetir(surecId);
-                        }
-                    });
-            };
-
-            useEffect(() => {
-                gorevleriGetir();
-            }, [rol]);
 
             return (
                 <div>
-                    <h2>Süreç Motoru Kontrol Paneli</h2>
-
-                    {/* 1. KISIM: SUREC BASLATMA */}
-                    <div className="box">
-                        <h3>Süreç Başlatma</h3>
-                        <label>Süreç Kodu:</label>
-                        <input type="text" value={kod} onChange={e => setKod(e.target.value)} />
-                        
-                        <label>Gün Sayısı:</label>
-                        <input type="number" value={gun} onChange={e => setGun(e.target.value)} />
-                        
-                        <label>Talep Eden:</label>
-                        <input type="text" value={isim} onChange={e => setIsim(e.target.value)} />
-                        
-                        <button onClick={surecBaslat}>Süreci Başlat</button>
-                        {baslatilanId && <p>Başlatılan Süreç ID: <b>{baslatilanId}</b></p>}
+                    <div className="top-bar">
+                        <b>{session.etiket} — {session.kullaniciAdi}</b>
+                        <button onClick={onLogout}>Çıkış Yap</button>
                     </div>
-
-                    {/* 2. KISIM: GOREV KUTUSU */}
                     <div className="box">
-                        <h3>Görev Kutusu</h3>
-                        <label>Rol Seç:</label>
-                        <select value={rol} onChange={e => setRol(e.target.value)}>
-                            <option value="yonetici">Yönetici</option>
-                            <option value="ik">İnsan Kaynakları</option>
-                        </select>
+                        <h3>Bekleyen Onaylar ({gorevler.length})</h3>
+                        {hata && <p className="error-text">{hata}</p>}
+                        {gorevler.length === 0 && <p style={{ color: '#888' }}>Şu anda bekleyen bir göreviniz yok.</p>}
+                        {gorevler.map(t => {
+                            const surec = surecler[t.processInstanceId];
+                            const degiskenler = degiskenleriOku(surec);
+                            const durum = surec ? surec.status : '...';
+                            const kilitli = islemUstunde !== null;
 
-                        <h4>Bekleyen Onaylar ({gorevler.length})</h4>
-                        {gorevler.map(t => (
-                            <div key={t.id} className="task-item">
-                                <p>Görev ID: {t.id} | Süreç ID: {t.processInstanceId}</p>
-                                <p>Adım: {t.taskNodeId}</p>
-                                <button onClick={() => gorevOnayla(t.id)}>Onayla (Approve)</button>
-                            </div>
-                        ))}
-                    </div>
+                            return (
+                                <div key={t.id} className="task-item">
+                                    <p>Görev ID: {t.id} | Süreç ID: {t.processInstanceId}</p>
+                                    <p>Adım: {t.taskNodeId}</p>
+                                    <p>
+                                        İsteyen: <b>{degiskenler.talepEden || '—'}</b>
+                                        {' | '}Gün Sayısı: <b>{degiskenler.gunSayisi ?? '—'}</b>
+                                    </p>
+                                    <p>Süreç Durumu: <b>{durum}</b></p>
 
-                    {/* 3. KISIM: SUREC DURUMU VE TARIHCE */}
-                    <div className="box">
-                        <h3>Süreç Durumu ve Tarihçe</h3>
-                        <input type="number" placeholder="Süreç ID girin" value={surecId} onChange={e => setSurecId(e.target.value)} />
-                        <button onClick={() => gecmisGetir(surecId)}>Sorgula</button>
+                                    <button className="btn-approve" disabled={kilitli} onClick={() => gorevOnayla(t.id)}>
+                                        Onayla (Approve)
+                                    </button>
 
-                        {durum && (
-                            <div style={{ marginTop: '15px', padding: '10px', backgroundColor: '#eee', borderRadius: '4px' }}>
-                                <p>Mevcut Durum: <b style={{ color: durum === 'COMPLETED' ? 'green' : 'orange' }}>{durum}</b></p>
-                                
-                                {/* 🛠️ KONTROL BUTONLARI (CANCEL, SUSPEND, RESUME) */}
-                                {durum !== 'COMPLETED' && durum !== 'CANCELLED' && (
-                                    <div>
-                                        <button className="btn-cancel" onClick={surecIptalEt}>Süreci İptal Et (Cancel)</button>
-                                        {durum === 'SUSPENDED' ? (
-                                            <button className="btn-resume" onClick={surecDevamEttir}>Süreci Devam Ettir (Resume)</button>
-                                        ) : (
-                                            <button className="btn-suspend" onClick={surecDurdur}>Süreci Durdur (Suspend)</button>
-                                        )}
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        <h4>İşlem Tarihçesi ({tarihce.length})</h4>
-                        <ul>
-                            {tarihce.map(log => (
-                                <li key={log.id} style={{ marginBottom: '10px' }}>
-                                    [{log.timestamp}] - <b>{log.action}</b> (Adım: {log.nodeId}) - Yapan: {log.actor} <br />
-                                    <i>Detay: {log.messages}</i>
-                                </li>
-                            ))}
-                        </ul>
+                                    {durum !== 'COMPLETED' && durum !== 'CANCELLED' && (
+                                        <React.Fragment>
+                                            <button className="btn-cancel" disabled={kilitli} onClick={() => surecIptalEt(t.processInstanceId)}>
+                                                İptal Et (Cancel)
+                                            </button>
+                                            {durum === 'SUSPENDED' ? (
+                                                <button className="btn-resume" disabled={kilitli} onClick={() => surecDevamEttir(t.processInstanceId)}>
+                                                    Devam Ettir (Resume)
+                                                </button>
+                                            ) : (
+                                                <button className="btn-suspend" disabled={kilitli} onClick={() => surecDurdur(t.processInstanceId)}>
+                                                    Askıya Al (Suspend)
+                                                </button>
+                                            )}
+                                        </React.Fragment>
+                                    )}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
             );
+        }
+
+        
+        function SurecBaslatKutusu({ session, onLogout }) {
+            const [gun, setGun] = useState(3);
+            const [sonuc, setSonuc] = useState(null);
+            const [hata, setHata] = useState('');
+
+            const surecBaslat = (e) => {
+                e.preventDefault();
+                setHata('');
+                setSonuc(null);
+
+                const degiskenler = { gunSayisi: Number(gun), talepEden: session.kullaniciAdi };
+
+              
+                fetch(url + '/instances/start/izin-talebi', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify(degiskenler)
+                })
+                .then(async res => {
+                    const veri = await res.json().catch(() => null);
+                    if (!res.ok) {
+                        throw new Error((veri && veri.message) || ('İstek başarısız (HTTP ' + res.status + ')'));
+                    }
+                    setSonuc(veri);
+                })
+                .catch(err => setHata(err.message));
+            };
+
+            return (
+                <div>
+                    <div className="top-bar">
+                        <b>{session.etiket} — {session.kullaniciAdi}</b>
+                        <button onClick={onLogout}>Çıkış Yap</button>
+                    </div>
+                    <div className="box">
+                        <h3>Yeni İzin Talebi</h3>
+                        <form onSubmit={surecBaslat}>
+                            <label>Kaç gün izin istiyorsun?</label>
+                            <input type="number" min="1" max="60" value={gun} onChange={e => setGun(e.target.value)} />
+                            <button className="btn-primary" type="submit">Talebi Gönder</button>
+                        </form>
+                        {hata && <p className="error-text">{hata}</p>}
+                        {sonuc && (
+                            <div style={{ marginTop: '15px', padding: '10px', background: '#eef9f0', borderRadius: '4px' }}>
+                                <p>Talebiniz oluşturuldu.</p>
+                                <p>Süreç ID: <b>{sonuc.id}</b></p>
+                                <p>Durum: <b>{sonuc.status}</b></p>
+                                <p>Şu anki adım: <b>{sonuc.currentNodeId}</b></p>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        
+        function AuditKutusu({ session, onLogout }) {
+            const [kayitlar, setKayitlar] = useState([]);
+            const [hata, setHata] = useState('');
+
+            useEffect(() => {
+                fetch(url + '/audit')
+                    .then(res => res.json())
+                    .then(data => setKayitlar(data))
+                    .catch(err => setHata('Kayıtlar yüklenemedi: ' + err.message));
+            }, []);
+
+            return (
+                <div>
+                    <div className="top-bar">
+                        <b>{session.etiket} — {session.kullaniciAdi}</b>
+                        <button onClick={onLogout}>Çıkış Yap</button>
+                    </div>
+                    <div className="box" style={{ maxWidth: '800px' }}>
+                        <h3>Tüm Denetim Kayıtları ({kayitlar.length})</h3>
+                        {hata && <p className="error-text">{hata}</p>}
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Zaman</th>
+                                    <th>Süreç ID</th>
+                                    <th>Node</th>
+                                    <th>Aksiyon</th>
+                                    <th>Aktör</th>
+                                    <th>Mesaj</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {kayitlar.map(k => (
+                                    <tr key={k.id}>
+                                        <td>{k.timestamp}</td>
+                                        <td>{k.processInstanceId}</td>
+                                        <td>{k.nodeId}</td>
+                                        <td>{k.action}</td>
+                                        <td>{k.actor}</td>
+                                        <td>{k.messages}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        }
+
+        
+        function App() {
+            const [session, setSession] = useState(null);
+
+            if (!session) {
+                return <LoginBox onLogin={setSession} />;
+            }
+
+            const onLogout = () => setSession(null);
+
+            if (session.rol === 'yonetici' || session.rol === 'ik') {
+                return <GorevKutusu session={session} onLogout={onLogout} />;
+            }
+            if (session.rol === 'admin') {
+                return <AuditKutusu session={session} onLogout={onLogout} />;
+            }
+            if (session.rol === 'kullanici') {
+                return <SurecBaslatKutusu session={session} onLogout={onLogout} />;
+            }
+            return null;
         }
 
         ReactDOM.createRoot(document.getElementById('root')).render(<App />);

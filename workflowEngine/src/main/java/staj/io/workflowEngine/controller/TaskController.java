@@ -1,11 +1,11 @@
 package staj.io.workflowEngine.controller;
 
 import org.springframework.web.bind.annotation.*;
-import org.springframework.http.HttpStatus;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import staj.io.workflowEngine.dataAccess.ProcessTaskRepository;
 import staj.io.workflowEngine.dataAccess.ProcessInstanceRepository;
 import staj.io.workflowEngine.dataAccess.ProcessAuditRepository;
+import staj.io.workflowEngine.exception.ResourceNotFoundException;
+import staj.io.workflowEngine.exception.ConflictException;
 import staj.io.workflowEngine.model.ProcessTask;
 import staj.io.workflowEngine.model.ProcessInstance;
 import staj.io.workflowEngine.model.ProcessAudit;
@@ -43,19 +43,18 @@ public class TaskController {
 
     @PostMapping("/{id}/complete")
     public String completeTask(@PathVariable int id, @RequestBody(required = false) String completedBy) {
-        
-        // SADECE STANDART RUNTIMEEXCEPTION KULLANILDI!
-        ProcessTask task = taskRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Görev bulunamadı: " + id));
 
-        // SADECE STANDART RUNTIMEEXCEPTION KULLANILDI!
+        ProcessTask task = taskRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Görev bulunamadı: " + id));
+
+        
         if ("COMPLETED".equals(task.getStatus())) {
-            throw new RuntimeException("Bu görev zaten tamamlanmış!");
+            throw new ConflictException("Bu görev zaten tamamlanmış! (id=" + id + ")");
         }
 
         task.setStatus("COMPLETED");
-        task.setCompletedDate(java.time.LocalDate.now()); 
-        
+        task.setCompletedDate(java.time.LocalDate.now());
+
         if (completedBy != null && !completedBy.isEmpty()) {
             task.setCompletedBy(completedBy);
         } else {
@@ -72,18 +71,12 @@ public class TaskController {
         audit.setActor(task.getCompletedBy());
         auditRepository.save(audit);
 
-        // SADECE STANDART RUNTIMEEXCEPTION KULLANILDI!
         ProcessInstance instance = instanceRepository.findById(task.getProcessInstanceId())
-                .orElseThrow(() -> new RuntimeException("Süreç örneği bulunamadı!"));
-        
-        engineService.proceed(instance);
+                .orElseThrow(() -> new ResourceNotFoundException("Süreç örneği bulunamadı: " + task.getProcessInstanceId()));
+
+        engineService.completeUserTaskAndAdvance(instance, task.getTaskNodeId());
 
         return "Görev başarıyla tamamlandı, süreç bir sonraki adıma ilerletildi.";
     }
 
-    @ExceptionHandler(ObjectOptimisticLockingFailureException.class)
-    @ResponseStatus(HttpStatus.CONFLICT)
-    public String handleOptimisticLockingFailure() {
-        return "Hata: Bu görev başka bir yönetici tarafından az önce onaylandı (409)!";
-    }
 }

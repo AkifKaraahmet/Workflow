@@ -4,6 +4,8 @@ import org.springframework.web.bind.annotation.*;
 import staj.io.workflowEngine.dataAccess.ProcessDefinitionRepository;
 import staj.io.workflowEngine.dataAccess.ProcessInstanceRepository;
 import staj.io.workflowEngine.dataAccess.ProcessAuditRepository;
+import staj.io.workflowEngine.exception.ResourceNotFoundException;
+import staj.io.workflowEngine.exception.ConflictException;
 import staj.io.workflowEngine.model.ProcessDefinition;
 import staj.io.workflowEngine.model.ProcessInstance;
 import staj.io.workflowEngine.model.ProcessAudit;
@@ -42,20 +44,20 @@ public class InstanceController {
                 break;
             }
         }
-        
+
         if (activeDef == null) {
-            throw new RuntimeException("Aktif süreç şablonu bulunamadı: " + processCode);
+            throw new ResourceNotFoundException("Aktif süreç şablonu bulunamadı: " + processCode);
         }
 
         ProcessInstance instance = new ProcessInstance();
-        instance.setProcessDefinitionId(activeDef.getId()); 
+        instance.setProcessDefinitionId(activeDef.getId());
         instance.setStatus("STARTED");
         instance.setCurrentNodeId(activeDef.getStartNodeId());
-        
+
         instance.setVariablesJson(variablesJson != null ? variablesJson : "{}");
-        
+
         instance.setCreatedDate(LocalDateTime.now());
-        
+
         ProcessInstance savedInstance = instanceRepository.save(instance);
 
         ProcessAudit audit = new ProcessAudit();
@@ -65,7 +67,7 @@ public class InstanceController {
         audit.setMessages("Süreç başarıyla başlatıldı.");
         audit.setTimestamp(LocalDateTime.now());
         audit.setActor("SYSTEM");
-        
+
         auditRepository.save(audit);
 
         engineService.proceed(savedInstance);
@@ -76,23 +78,23 @@ public class InstanceController {
     @GetMapping("/{id}")
     public ProcessInstance getInstance(@PathVariable int id) {
         return instanceRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Süreç örneği bulunamadı: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Süreç örneği bulunamadı: " + id));
     }
 
     @GetMapping("/{id}/variables")
     public String getVariables(@PathVariable int id) {
         return instanceRepository.findById(id)
                 .map(ProcessInstance::getVariablesJson)
-                .orElseThrow(() -> new RuntimeException("Süreç örneği bulunamadı: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Süreç örneği bulunamadı: " + id));
     }
 
     @PostMapping("/{id}/cancel")
     public String cancelInstance(@PathVariable int id) {
         ProcessInstance instance = instanceRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Süreç örneği bulunamadı: " + id));
-        
+                .orElseThrow(() -> new ResourceNotFoundException("Süreç örneği bulunamadı: " + id));
+
         if ("COMPLETED".equals(instance.getStatus()) || "CANCELLED".equals(instance.getStatus())) {
-            throw new RuntimeException("Zaten tamamlanmış veya iptal edilmiş süreç tekrar iptal edilemez!");
+            throw new ConflictException("Zaten tamamlanmış veya iptal edilmiş süreç tekrar iptal edilemez! (id=" + id + ")");
         }
 
         instance.setStatus("CANCELLED");
@@ -101,9 +103,9 @@ public class InstanceController {
 
         ProcessAudit audit = new ProcessAudit();
         audit.setProcessInstanceId(id);
-        audit.setNodeId(instance.getCurrentNodeId()); 
+        audit.setNodeId(instance.getCurrentNodeId());
         audit.setAction("CANCELLED");
-        audit.setMessages("Süreç kullanıcı tarafından iptal edildi."); 
+        audit.setMessages("Süreç kullanıcı tarafından iptal edildi.");
         audit.setTimestamp(LocalDateTime.now());
         audit.setActor("USER");
         auditRepository.save(audit);
@@ -114,10 +116,10 @@ public class InstanceController {
     @PostMapping("/{id}/suspend")
     public String suspendInstance(@PathVariable int id) {
         ProcessInstance instance = instanceRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Süreç örneği bulunamadı: " + id));
-        
+                .orElseThrow(() -> new ResourceNotFoundException("Süreç örneği bulunamadı: " + id));
+
         if ("COMPLETED".equals(instance.getStatus()) || "CANCELLED".equals(instance.getStatus())) {
-            throw new RuntimeException("Zaten tamamlanmış veya iptal edilmiş süreç dondurulamaz!");
+            throw new ConflictException("Zaten tamamlanmış veya iptal edilmiş süreç dondurulamaz! (id=" + id + ")");
         }
 
         instance.setStatus("SUSPENDED");
@@ -127,7 +129,7 @@ public class InstanceController {
         audit.setProcessInstanceId(id);
         audit.setNodeId(instance.getCurrentNodeId());
         audit.setAction("SUSPENDED");
-        audit.setMessages("Süreç askıya alındı."); 
+        audit.setMessages("Süreç askıya alındı.");
         audit.setTimestamp(LocalDateTime.now());
         audit.setActor("SYSTEM");
         auditRepository.save(audit);
@@ -138,10 +140,10 @@ public class InstanceController {
     @PostMapping("/{id}/resume")
     public String resumeInstance(@PathVariable int id) {
         ProcessInstance instance = instanceRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Süreç örneği bulunamadı: " + id));
-        
+                .orElseThrow(() -> new ResourceNotFoundException("Süreç örneği bulunamadı: " + id));
+
         if (!"SUSPENDED".equals(instance.getStatus())) {
-            throw new RuntimeException("Sadece askıdaki (SUSPENDED) süreçler aktif edilebilir!");
+            throw new ConflictException("Sadece askıdaki  süreçler aktif edilebilir! (id=" + id + ")");
         }
 
         instance.setStatus("STARTED");
@@ -151,7 +153,7 @@ public class InstanceController {
         audit.setProcessInstanceId(id);
         audit.setNodeId(instance.getCurrentNodeId());
         audit.setAction("RESUMED");
-        audit.setMessages("Süreç askıdan indirildi, devam ediyor."); 
+        audit.setMessages("Süreç askıdan indirildi, devam ediyor.");
         audit.setTimestamp(LocalDateTime.now());
         audit.setActor("SYSTEM");
         auditRepository.save(audit);
