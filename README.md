@@ -71,3 +71,15 @@ Java, Spring Boot, Spring Data JPA, Hibernate, PostgreSQL, Jackson, springdoc-op
 
 1. Backend localhost 8080'de çalışıyor olmalı
 2. Test için Swagger UI kullandım
+
+Örnek DefinitionJson:
+{
+  "processName": "İzin Talebi Süreci",
+  "processCode": "izin-talebi",
+  "version": 1,
+  "isActive": true,
+  "startNodeId": "start_node",
+  "definitionJson": "{\"key\": \"izin-talebi\", \"name\": \"İzin Talebi Süreci\", \"startNode\": \"start_node\", \"nodes\": [{\"id\": \"start_node\", \"type\": \"START\"}, {\"id\": \"manager_approval\", \"type\": \"USER_TASK\", \"name\": \"Yönetici Onayı\", \"assignee\": \"yonetici\"}, {\"id\": \"check_days\", \"type\": \"EXCLUSIVE_GATEWAY\"}, {\"id\": \"hr_approval\", \"type\": \"USER_TASK\", \"name\": \"İK Onayı\", \"assignee\": \"ik\"}, {\"id\": \"notification\", \"type\": \"SERVICE_TASK\"}, {\"id\": \"end_node\", \"type\": \"END\"}], \"transitions\": [{\"from\": \"start_node\", \"to\": \"manager_approval\"}, {\"from\": \"manager_approval\", \"to\": \"check_days\"}, {\"from\": \"check_days\", \"condition\": {\"variable\": \"gunSayisi\", \"operator\": \"gt\", \"value\": 5}, \"to\": \"hr_approval\"}, {\"from\": \"check_days\", \"default\": true, \"to\": \"notification\"}, {\"from\": \"hr_approval\", \"to\": \"notification\"}, {\"from\": \"notification\", \"to\": \"end_node\"}]}",
+  "active": true
+}
+
